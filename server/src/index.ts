@@ -116,8 +116,54 @@ socket.on("stop-typing", () => {
   socket.to(room).emit("user-stop-typing", username);
 });
 
+// Leave room
+socket.on("leave-room", (callback) => {
+  const username = socket.data.username;
+  const room = socket.data.room;
+
+  if (!username || !room) {
+    callback?.();
+    return;
+  }
+
+  const users = roomUsers.get(room);
+
+  if (users) {
+    users.delete(socket.id);
+
+    if (users.size === 0) {
+      roomUsers.delete(room);
+    }
+  }
+
+  // Remove socket from the Socket.IO room
+  socket.leave(room);
+
+  // Tell everyone still inside
+  io.to(room).emit("chat-message", {
+    id: randomUUID(),
+    type: "system",
+    message: `${username} left the room`,
+    createdAt: new Date().toISOString(),
+  });
+
+  // Update online users
+  emitRoomUsers(room);
+
+  console.log(`👋 ${username} left ${room}`);
+
+  // IMPORTANT:
+  // Clearing this so disconnecting doesn't announce
+  // the user leaving a second time.
+  socket.data.username = undefined;
+  socket.data.room = undefined;
+
+  callback?.();
+});
+
+
   // USER LEAVING
-  socket.on("disconnecting", () => {
+socket.on("disconnecting", () => {
   const username = socket.data.username;
   const room = socket.data.room;
 
@@ -128,7 +174,6 @@ socket.on("stop-typing", () => {
   if (users) {
     users.delete(socket.id);
 
-    // Remove empty room
     if (users.size === 0) {
       roomUsers.delete(room);
     }
@@ -141,7 +186,6 @@ socket.on("stop-typing", () => {
     createdAt: new Date().toISOString(),
   });
 
-  // Send remaining users
   emitRoomUsers(room);
 });
 

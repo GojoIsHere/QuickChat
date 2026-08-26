@@ -28,6 +28,20 @@ function App() {
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const leaveRoom = () => {
+  socket.emit("stop-typing");
+
+  socket.emit("leave-room", () => {
+    socket.disconnect();
+
+    setJoined(false);
+    setMessages([]);
+    setOnlineUsers([]);
+    setTypingUsers([]);
+    setMessage("");
+    });
+  };
+
   useEffect(() => {
     const handleConnect = () => {
       setConnected(true);
@@ -202,6 +216,9 @@ function App() {
             ? "🟢 Connected"
             : "🔴 Disconnected"}
         </p>
+        <button onClick={leaveRoom}>
+          Leave Room
+        </button>
       </header>
       <aside>
           <h3>Online — {onlineUsers.length}</h3>
