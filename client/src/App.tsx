@@ -1,4 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { socket } from "./socket";
 
 type Message = {
@@ -20,6 +25,8 @@ function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const handleConnect = () => {
@@ -41,16 +48,38 @@ function App() {
       setOnlineUsers(users);
     };
 
+    const handleUserTyping = (typingUsername: string) => {
+    setTypingUsers((previousUsers) => {
+      if (previousUsers.includes(typingUsername)) {
+        return previousUsers;
+      }
+
+      return [...previousUsers, typingUsername];
+    });
+  };
+
+  const handleUserStopTyping = (typingUsername: string) => {
+    setTypingUsers((previousUsers) =>
+      previousUsers.filter(
+        (user) => user !== typingUsername
+      )
+    );
+  };
+
     socket.on("room-users", handleRoomUsers);
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("chat-message", handleMessage);
+    socket.on("user-typing", handleUserTyping);
+    socket.on("user-stop-typing", handleUserStopTyping);
 
     return () => {
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
       socket.off("chat-message", handleMessage);
       socket.off("room-users", handleRoomUsers);
+      socket.off("user-typing", handleUserTyping);
+      socket.off("user-stop-typing", handleUserStopTyping);
     };
   }, []);
 
@@ -72,6 +101,30 @@ function App() {
     setJoined(true);
   };
 
+  const handleTyping = (value: string) => {
+  setMessage(value);
+
+  if (!value.trim()) {
+    socket.emit("stop-typing");
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    return;
+  }
+
+  socket.emit("typing");
+
+  if (typingTimeoutRef.current) {
+    clearTimeout(typingTimeoutRef.current);
+  }
+
+  typingTimeoutRef.current = setTimeout(() => {
+    socket.emit("stop-typing");
+  }, 1200);
+  };
+
   const sendMessage = (event: FormEvent) => {
     event.preventDefault();
 
@@ -81,8 +134,15 @@ function App() {
 
     socket.emit("chat-message", cleanMessage);
 
+    socket.emit("stop-typing");
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
     setMessage("");
   };
+
 
   if (!joined) {
     return (
@@ -178,14 +238,36 @@ function App() {
           );
         })}
       </section>
+      <div>
+            {typingUsers.length === 1 && (
+              <p>
+                <em>{typingUsers[0]} is typing...</em>
+              </p>
+            )}
 
+            {typingUsers.length === 2 && (
+              <p>
+                <em>
+                  {typingUsers[0]} and {typingUsers[1]} are typing...
+                </em>
+              </p>
+            )}
+
+            {typingUsers.length > 2 && (
+              <p>
+                <em>
+                  Several people are typing...
+                </em>
+              </p>
+            )}
+          </div>
       <form onSubmit={sendMessage}>
         <input
           type="text"
           placeholder="Type your message..."
           value={message}
           onChange={(event) =>
-            setMessage(event.target.value)
+            handleTyping(event.target.value)
           }
         />
 

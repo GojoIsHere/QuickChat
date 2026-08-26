@@ -97,6 +97,25 @@ io.on("connection", (socket) => {
     });
   });
 
+  // TYPING INDICATOR
+  socket.on("typing", () => {
+  const username = socket.data.username;
+  const room = socket.data.room;
+
+  if (!username || !room) return;
+
+  socket.to(room).emit("user-typing", username);
+});
+
+socket.on("stop-typing", () => {
+  const username = socket.data.username;
+  const room = socket.data.room;
+
+  if (!username || !room) return;
+
+  socket.to(room).emit("user-stop-typing", username);
+});
+
   // USER LEAVING
   socket.on("disconnecting", () => {
   const username = socket.data.username;
