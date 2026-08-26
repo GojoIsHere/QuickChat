@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: quickchat-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: quickchat
+      POSTGRES_PASSWORD: quickchat
+      POSTGRES_DB: quickchat
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - quickchat_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  quickchat_postgres_data:

@@ -3,6 +3,11 @@ import { createServer } from "http";
 import { randomUUID } from "node:crypto";
 import { Server } from "socket.io";
 import cors from "cors";
+import {
+  createMessage,
+  getOrCreateRoom,
+  getRecentMessages,
+} from "./db/queries.js";
 
 const app = express();
 const PORT = 3001;
@@ -42,59 +47,116 @@ io.on("connection", (socket) => {
   // JOIN ROOM
   socket.on(
   "join-room",
-  ({ username, room }: { username: string; room: string }) => {
-    const cleanUsername = username.trim();
-    const cleanRoom = room.trim().toLowerCase();
+  async ({
+    username,
+    room,
+  }: {
+    username: string;
+    room: string;
+  }) => {
+    try {
+      const cleanUsername = username.trim();
+      const cleanRoom = room.trim().toLowerCase();
 
-    if (!cleanUsername || !cleanRoom) return;
+      if (!cleanUsername || !cleanRoom) return;
 
-    socket.data.username = cleanUsername;
-    socket.data.room = cleanRoom;
+      // 1. Find or create the PostgreSQL room
+      const databaseRoom = await getOrCreateRoom(cleanRoom);
 
-    socket.join(cleanRoom);
+      if (!databaseRoom) {
+        throw new Error("Could not create or find room");
+      }
 
-    // Create room user map if it doesn't exist
-    if (!roomUsers.has(cleanRoom)) {
-      roomUsers.set(cleanRoom, new Map());
+      // 2. Store user/room info on the socket
+      socket.data.username = cleanUsername;
+      socket.data.room = cleanRoom;
+      socket.data.roomId = databaseRoom.id;
+
+      // 3. Join Socket.IO room
+      socket.join(cleanRoom);
+
+      // 4. Load previous messages from PostgreSQL
+      const history = await getRecentMessages(
+        databaseRoom.id,
+        50
+      );
+
+      // 5. Send history ONLY to the person joining
+      socket.emit(
+        "message-history",
+        history.map((item) => ({
+          id: item.id,
+          type: "chat",
+          username: item.username,
+          message: item.content,
+          createdAt: item.createdAt.toISOString(),
+        }))
+      );
+
+      // 6. Online-user tracking
+      if (!roomUsers.has(cleanRoom)) {
+        roomUsers.set(cleanRoom, new Map());
+      }
+
+      roomUsers
+        .get(cleanRoom)!
+        .set(socket.id, cleanUsername);
+
+      console.log(
+        `👤 ${cleanUsername} joined ${cleanRoom}`
+      );
+
+      // 7. Join notification
+      io.to(cleanRoom).emit("chat-message", {
+        id: randomUUID(),
+        type: "system",
+        message: `${cleanUsername} joined the room`,
+        createdAt: new Date().toISOString(),
+      });
+
+      emitRoomUsers(cleanRoom);
+    } catch (error) {
+      console.error("❌ Failed to join room:", error);
     }
-
-    // Add this user using socket.id
-    roomUsers
-      .get(cleanRoom)!
-      .set(socket.id, cleanUsername);
-
-    console.log(`👤 ${cleanUsername} joined ${cleanRoom}`);
-
-    io.to(cleanRoom).emit("chat-message", {
-      id: randomUUID(),
-      type: "system",
-      message: `${cleanUsername} joined the room`,
-      createdAt: new Date().toISOString(),
-    });
-
-    // Send updated online user list
-    emitRoomUsers(cleanRoom);
   }
 );
+
   // CHAT MESSAGE
-  socket.on("chat-message", (message: string) => {
+  socket.on("chat-message", async (message: string) => {
+  try {
     const username = socket.data.username;
     const room = socket.data.room;
+    const roomId = socket.data.roomId;
 
-    if (!username || !room) return;
+    if (!username || !room || !roomId) return;
 
     const cleanMessage = message.trim();
 
     if (!cleanMessage) return;
 
-    io.to(room).emit("chat-message", {
-      id: randomUUID(),
-      type: "chat",
+    // SAVE FIRST
+    const savedMessage = await createMessage({
+      roomId,
       username,
-      socketId: socket.id,
-      message: cleanMessage,
-      createdAt: new Date().toISOString(),
+      content: cleanMessage,
     });
+
+    // THEN BROADCAST
+    io.to(room).emit("chat-message", {
+      id: savedMessage.id,
+      type: "chat",
+      username: savedMessage.username,
+      socketId: socket.id,
+      message: savedMessage.content,
+      createdAt: savedMessage.createdAt.toISOString(),
+    });
+
+    console.log(
+      `💾 ${username} saved message in ${room}`
+    );
+  } catch (error) {
+    console.error("❌ Failed to save message:", error);
+  }
   });
 
   // TYPING INDICATOR
@@ -157,6 +219,7 @@ socket.on("leave-room", (callback) => {
   // the user leaving a second time.
   socket.data.username = undefined;
   socket.data.room = undefined;
+  socket.data.roomId = undefined;
 
   callback?.();
 });

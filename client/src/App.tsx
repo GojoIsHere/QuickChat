@@ -28,19 +28,20 @@ function App() {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const leaveRoom = () => {
-  socket.emit("stop-typing");
-
-  socket.emit("leave-room", () => {
-    socket.disconnect();
-
-    setJoined(false);
-    setMessages([]);
-    setOnlineUsers([]);
-    setTypingUsers([]);
-    setMessage("");
-    });
+    socket.emit("stop-typing");
+    socket.emit("leave-room", () => {
+      socket.disconnect();
+        setJoined(false);
+        setMessages([]);
+        setOnlineUsers([]);
+        setTypingUsers([]);
+        setMessage("");
+        setMobileSidebarOpen(false);
+      });
+    
   };
 
   useEffect(() => {
@@ -81,12 +82,17 @@ function App() {
     );
   };
 
+  const handleMessageHistory = (history: Message[]) => {
+    setMessages(history);
+  };
+
     socket.on("room-users", handleRoomUsers);
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("chat-message", handleMessage);
     socket.on("user-typing", handleUserTyping);
     socket.on("user-stop-typing", handleUserStopTyping);
+    socket.on("message-history",handleMessageHistory);
 
     return () => {
       socket.off("connect", handleConnect);
@@ -95,6 +101,7 @@ function App() {
       socket.off("room-users", handleRoomUsers);
       socket.off("user-typing", handleUserTyping);
       socket.off("user-stop-typing", handleUserStopTyping);
+      socket.off("message-history",handleMessageHistory);
     };
   }, []);
 
@@ -158,6 +165,16 @@ function App() {
     setMessage("");
   };
 
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+  messagesEndRef.current?.scrollIntoView({
+    behavior: "smooth",
+  });
+  }, [messages]);
+
+
+
+
 
   if (!joined) {
   return (
@@ -216,11 +233,30 @@ function App() {
 
   return (
   <main className="chat-app">
-    <aside className="sidebar">
-      <div className="sidebar-brand">
-        <div className="brand-icon small">Q</div>
+    <aside
+      className={`sidebar ${
+        mobileSidebarOpen ? "sidebar-open" : ""
+      }`}
+    >
+    {mobileSidebarOpen && (
+      <button
+        className="sidebar-overlay"
+        onClick={() => setMobileSidebarOpen(false)}
+        aria-label="Close sidebar"
+      />
+    )}
+    <div className="sidebar-brand">
+      <div className="brand-icon small">Q</div>
         <h2>QuickChat</h2>
-      </div>
+
+      <button
+        className="sidebar-close"
+        onClick={() => setMobileSidebarOpen(false)}
+        aria-label="Close sidebar"
+      >
+        ×
+      </button>
+    </div>
 
       <div className="room-info">
         <span className="room-label">CURRENT ROOM</span>
@@ -253,6 +289,14 @@ function App() {
 
     <section className="chat-panel">
       <header className="chat-header">
+        <button
+          className="mobile-menu-button"
+          onClick={() => setMobileSidebarOpen(true)}
+          aria-label="Open room menu"
+          aria-expanded={mobileSidebarOpen}
+        >
+          ☰
+        </button>
         <div>
           <h2>#{room}</h2>
           <p>
@@ -321,6 +365,7 @@ function App() {
             </article>
           );
         })}
+        <div ref={messagesEndRef} />
       </section>
 
       <div className="typing-area">
