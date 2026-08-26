@@ -5,6 +5,7 @@ import {
   useState,
 } from "react";
 import { socket } from "./socket";
+import "./App.css";
 
 type Message = {
   id: string;
@@ -159,20 +160,26 @@ function App() {
 
 
   if (!joined) {
-    return (
-      <main>
-        <h1>QuickChat 💬</h1>
+  return (
+    <main className="join-page">
+      <section className="join-card">
+        <div className="brand">
+          <div className="brand-icon">Q</div>
 
-        <p>Join a room and start chatting.</p>
-
-        <form onSubmit={joinRoom}>
           <div>
+            <h1>QuickChat</h1>
+            <p>Real-time conversations. No refresh required.</p>
+          </div>
+        </div>
+
+        <form className="join-form" onSubmit={joinRoom}>
+          <div className="form-group">
             <label htmlFor="username">Username</label>
 
             <input
               id="username"
               type="text"
-              placeholder="Gojo"
+              placeholder="Enter your username"
               value={username}
               onChange={(event) =>
                 setUsername(event.target.value)
@@ -180,13 +187,13 @@ function App() {
             />
           </div>
 
-          <div>
+          <div className="form-group">
             <label htmlFor="room">Room</label>
 
             <input
               id="room"
               type="text"
-              placeholder="developers"
+              placeholder="e.g. developers"
               value={room}
               onChange={(event) =>
                 setRoom(event.target.value)
@@ -194,94 +201,151 @@ function App() {
             />
           </div>
 
-          <button type="submit">
-            Join Chat
+          <button className="join-button" type="submit">
+            Join conversation
           </button>
         </form>
-      </main>
-    );
-  }
+
+        <p className="join-footer">
+          Powered by React + Socket.IO
+        </p>
+      </section>
+    </main>
+  );
+}
 
   return (
-    <main>
-      <header>
-        <h1>QuickChat 💬</h1>
+  <main className="chat-app">
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="brand-icon small">Q</div>
+        <h2>QuickChat</h2>
+      </div>
 
-        <p>
-          Room: <strong>#{room}</strong>
-        </p>
+      <div className="room-info">
+        <span className="room-label">CURRENT ROOM</span>
+        <h3>#{room}</h3>
+      </div>
 
-        <p>
-          {connected
-            ? "🟢 Connected"
-            : "🔴 Disconnected"}
-        </p>
-        <button onClick={leaveRoom}>
-          Leave Room
-        </button>
+      <div className="online-section">
+        <div className="online-heading">
+          <span>ONLINE</span>
+          <span>{onlineUsers.length}</span>
+        </div>
+
+        <ul className="online-list">
+          {onlineUsers.map((user, index) => (
+            <li key={`${user}-${index}`}>
+              <span className="online-dot" />
+              <span>{user}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <button
+        className="leave-button"
+        onClick={leaveRoom}
+      >
+        Leave room
+      </button>
+    </aside>
+
+    <section className="chat-panel">
+      <header className="chat-header">
+        <div>
+          <h2>#{room}</h2>
+          <p>
+            {onlineUsers.length}{" "}
+            {onlineUsers.length === 1 ? "member" : "members"} online
+          </p>
+        </div>
+
+        <div
+          className={
+            connected
+              ? "connection connected"
+              : "connection disconnected"
+          }
+        >
+          <span />
+          {connected ? "Live" : "Disconnected"}
+        </div>
       </header>
-      <aside>
-          <h3>Online — {onlineUsers.length}</h3>
-          <ul>
-            {onlineUsers.map((user, index) => (
-              <li key={`${user}-${index}`}>
-                🟢 {user}
-              </li>
-            ))}
-          </ul>
-        </aside>
-      <section>
+
+      <section className="messages">
         {messages.map((item) => {
           if (item.type === "system") {
             return (
-              <p key={item.id}>
-                <em>{item.message}</em>
-              </p>
+              <div className="system-message" key={item.id}>
+                {item.message}
+              </div>
             );
           }
 
+          const isMine = item.username === username;
+
           return (
-            <article key={item.id}>
-              <strong>{item.username}</strong>
+            <article
+              className={`message-row ${
+                isMine ? "mine" : ""
+              }`}
+              key={item.id}
+            >
+              <div className="message-avatar">
+                {item.username
+                  ?.charAt(0)
+                  .toUpperCase()}
+              </div>
 
-              <p>{item.message}</p>
+              <div className="message-content">
+                <div className="message-meta">
+                  <strong>
+                    {isMine ? "You" : item.username}
+                  </strong>
 
-              <small>
-                {new Date(
-                  item.createdAt
-                ).toLocaleTimeString()}
-              </small>
+                  <time>
+                    {new Date(
+                      item.createdAt
+                    ).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </time>
+                </div>
+
+                <div className="message-bubble">
+                  {item.message}
+                </div>
+              </div>
             </article>
           );
         })}
       </section>
-      <div>
-            {typingUsers.length === 1 && (
-              <p>
-                <em>{typingUsers[0]} is typing...</em>
-              </p>
-            )}
 
-            {typingUsers.length === 2 && (
-              <p>
-                <em>
-                  {typingUsers[0]} and {typingUsers[1]} are typing...
-                </em>
-              </p>
-            )}
+      <div className="typing-area">
+        {typingUsers.length === 1 && (
+          <span>{typingUsers[0]} is typing...</span>
+        )}
 
-            {typingUsers.length > 2 && (
-              <p>
-                <em>
-                  Several people are typing...
-                </em>
-              </p>
-            )}
-          </div>
-      <form onSubmit={sendMessage}>
+        {typingUsers.length === 2 && (
+          <span>
+            {typingUsers[0]} and {typingUsers[1]} are typing...
+          </span>
+        )}
+
+        {typingUsers.length > 2 && (
+          <span>Several people are typing...</span>
+        )}
+      </div>
+
+      <form
+        className="message-composer"
+        onSubmit={sendMessage}
+      >
         <input
           type="text"
-          placeholder="Type your message..."
+          placeholder={`Message #${room}`}
           value={message}
           onChange={(event) =>
             handleTyping(event.target.value)
@@ -292,8 +356,8 @@ function App() {
           Send
         </button>
       </form>
-    </main>
-  );
+    </section>
+  </main>
+);
 }
-
 export default App;
