@@ -300,5 +300,5 @@ socket.on("disconnecting", () => {
 });
 
 httpServer.listen(PORT, () => {
-  console.log(`🚀 QuickChat server running on http://localhost:${PORT}`);
+  console.log(`🚀 QuickChat server running on ${PORT}`);
 });
