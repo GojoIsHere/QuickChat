@@ -1,4 +1,9 @@
 services:
+
+  # =========================
+  # POSTGRESQL
+  # =========================
+
   postgres:
     image: postgres:16
     container_name: quickchat-postgres
@@ -14,6 +19,80 @@ services:
 
     volumes:
       - quickchat_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U quickchat -d quickchat"
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  # =========================
+  # DRIZZLE MIGRATIONS
+  # =========================
+
+  migrate:
+    build:
+      context: ./server
+      target: migrate
+
+    environment:
+      DATABASE_URL: postgresql://quickchat:quickchat@postgres:5432/quickchat
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
+  # =========================
+  # NODE / SOCKET.IO SERVER
+  # =========================
+
+  server:
+    build:
+      context: ./server
+      target: runtime
+
+    container_name: quickchat-server
+    restart: unless-stopped
+
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://quickchat:quickchat@postgres:5432/quickchat
+      CLIENT_URL: http://localhost:8080
+
+    ports:
+      - "3001:3001"
+
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+
+  # =========================
+  # REACT CLIENT
+  # =========================
+
+  client:
+    build:
+      context: ./client
+
+      args:
+        VITE_SERVER_URL: http://localhost:3001
+
+    container_name: quickchat-client
+    restart: unless-stopped
+
+    ports:
+      - "8080:80"
+
+    depends_on:
+      - server
+
 
 volumes:
   quickchat_postgres_data:

@@ -1,9 +1,5 @@
-import {
-  FormEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import { socket } from "./socket";
 import "./App.css";
 
@@ -28,7 +24,9 @@ function App() {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const [messageError, setMessageError] = useState("");
 
   const leaveRoom = () => {
     socket.emit("stop-typing");
@@ -43,6 +41,7 @@ function App() {
       });
     
   };
+
 
   useEffect(() => {
     const handleConnect = () => {
@@ -86,6 +85,15 @@ function App() {
     setMessages(history);
   };
 
+  const handleJoinError = (error: string) => {
+    setJoinError(error);
+    setJoined(false);
+
+    if (socket.connected) {
+      socket.disconnect();
+    }
+  };
+
     socket.on("room-users", handleRoomUsers);
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
@@ -93,6 +101,7 @@ function App() {
     socket.on("user-typing", handleUserTyping);
     socket.on("user-stop-typing", handleUserStopTyping);
     socket.on("message-history",handleMessageHistory);
+    socket.on("join-error", handleJoinError);
 
     return () => {
       socket.off("connect", handleConnect);
@@ -102,19 +111,21 @@ function App() {
       socket.off("user-typing", handleUserTyping);
       socket.off("user-stop-typing", handleUserStopTyping);
       socket.off("message-history",handleMessageHistory);
+      socket.off("join-error", handleJoinError);
     };
   }, []);
 
-  const joinRoom = (event: FormEvent) => {
-    event.preventDefault();
+const joinRoom = (event: FormEvent) => {
+  event.preventDefault();
 
-    const cleanUsername = username.trim();
-    const cleanRoom = room.trim();
+  const cleanUsername = username.trim();
+  const cleanRoom = room.trim();
 
-    if (!cleanUsername || !cleanRoom) return;
+  if (!cleanUsername || !cleanRoom) return;
 
-    socket.connect();
+  setJoinError("");
 
+  const join = () => {
     socket.emit("join-room", {
       username: cleanUsername,
       room: cleanRoom,
@@ -122,6 +133,14 @@ function App() {
 
     setJoined(true);
   };
+
+  if (socket.connected) {
+    join();
+  } else {
+    socket.connect();
+    socket.once("connect", join);
+  }
+};
 
   const handleTyping = (value: string) => {
   setMessage(value);
@@ -154,8 +173,16 @@ function App() {
 
     if (!cleanMessage) return;
 
-    socket.emit("chat-message", cleanMessage);
+    if (cleanMessage.length > 1000) {
+      setMessageError(
+        "Messages must be 1000 characters or less."
+      );
+      return;
+    }
 
+    setMessageError("");
+
+    socket.emit("chat-message", cleanMessage);
     socket.emit("stop-typing");
 
     if (typingTimeoutRef.current) {
@@ -196,6 +223,7 @@ function App() {
             <input
               id="username"
               type="text"
+              maxLength={24}
               placeholder="Enter your username"
               value={username}
               onChange={(event) =>
@@ -210,6 +238,7 @@ function App() {
             <input
               id="room"
               type="text"
+              maxLength={40}
               placeholder="e.g. developers"
               value={room}
               onChange={(event) =>
@@ -222,6 +251,11 @@ function App() {
             Join conversation
           </button>
         </form>
+        {joinError && (
+          <p className="form-error">
+            {joinError}
+          </p>
+        )}
 
         <p className="join-footer">
           Powered by React + Socket.IO
@@ -383,6 +417,20 @@ function App() {
           <span>Several people are typing...</span>
         )}
       </div>
+      {messageError && (
+      <p className="message-error">
+        {messageError}
+        </p>
+      )}
+      <span
+        className={
+          message.length > 1000
+          ? "character-count over-limit"
+          : "character-count"
+        }
+      >
+        {message.length}/1000
+      </span>
 
       <form
         className="message-composer"

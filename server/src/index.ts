@@ -1,28 +1,34 @@
-import express from "express";
+import { createApp } from "./app.js";
 import { createServer } from "http";
 import { randomUUID } from "node:crypto";
 import { Server } from "socket.io";
-import cors from "cors";
+
 import {
   createMessage,
   getOrCreateRoom,
   getRecentMessages,
 } from "./db/queries.js";
 
-const app = express();
-const PORT = 3001;
+import {
+  validateJoinInput,
+  validateMessage,
+} from "./validation.js";
 
-app.use(cors());
-app.use(express.json());
-
+const PORT = Number(process.env.PORT) || 3001;
+const CLIENT_URL = process.env.CLIENT_URL ?? "http://localhost:5173";
+const app = createApp(CLIENT_URL);
 const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: CLIENT_URL,
     methods: ["GET", "POST"],
   },
 });
+
+// const USERNAME_MAX_LENGTH = 24;
+// const ROOM_MAX_LENGTH = 40;
+// const MESSAGE_MAX_LENGTH = 1000;
 
 app.get("/", (_req, res) => {
   res.json({
@@ -46,18 +52,25 @@ io.on("connection", (socket) => {
 
   // JOIN ROOM
   socket.on(
-  "join-room",
-  async ({
+    "join-room",
+    async ({
     username,
     room,
-  }: {
-    username: string;
-    room: string;
-  }) => {
+    }: {
+        username: string;
+        room: string;
+      }) => {
     try {
-      const cleanUsername = username.trim();
-      const cleanRoom = room.trim().toLowerCase();
+     
+      const validation = validateJoinInput(username, room);
 
+      if (!validation.ok) {
+        socket.emit("join-error", validation.error);
+        return;
+      }
+
+      const cleanUsername = validation.username;
+      const cleanRoom = validation.room;
       if (!cleanUsername || !cleanRoom) return;
 
       // 1. Find or create the PostgreSQL room
@@ -98,6 +111,30 @@ io.on("connection", (socket) => {
         roomUsers.set(cleanRoom, new Map());
       }
 
+      const usersInRoom = roomUsers.get(cleanRoom);
+
+      const usernameTaken = usersInRoom
+        ? Array.from(usersInRoom.values()).some(
+            (existingUsername) =>
+              existingUsername.toLowerCase() === cleanUsername.toLowerCase()
+          )
+        : false;
+
+      if (usernameTaken) {
+        socket.leave(cleanRoom);
+
+        socket.data.username = undefined;
+        socket.data.room = undefined;
+        socket.data.roomId = undefined;
+
+        socket.emit(
+          "join-error",
+          "That username is already being used in this room."
+        );
+
+        return;
+      }
+
       roomUsers
         .get(cleanRoom)!
         .set(socket.id, cleanUsername);
@@ -130,9 +167,14 @@ io.on("connection", (socket) => {
 
     if (!username || !room || !roomId) return;
 
-    const cleanMessage = message.trim();
+    const validation = validateMessage(message);
 
-    if (!cleanMessage) return;
+    if (!validation.ok) {
+      socket.emit("message-error", validation.error);
+      return;
+    }
+
+    const cleanMessage = validation.message;
 
     // SAVE FIRST
     const savedMessage = await createMessage({

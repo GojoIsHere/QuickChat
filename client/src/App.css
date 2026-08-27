@@ -168,6 +168,24 @@ input {
 }
 
 /* =========================
+   FORM ERROR 
+========================= */
+.form-error {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+
+  background: rgba(239, 68, 68, 0.08);
+  color: #fca5a5;
+
+  font-size: 13px;
+}
+
+
+
+/* =========================
    CHAT APP
 ========================= */
 
@@ -179,6 +197,23 @@ input {
   min-height: 100vh;
 
   background: #09090b;
+}
+
+.message-error {
+  margin: 0;
+  padding: 4px 24px;
+
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+.character-count {
+  color: #71717a;
+  font-size: 11px;
+}
+
+.character-count.over-limit {
+  color: #ef4444;
 }
 
 /* =========================
